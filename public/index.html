@@ -3,7 +3,8 @@
 <head>
 <meta charset="UTF-8" />
 <meta name="viewport" content="width=device-width, initial-scale=1.0" />
-<title>Løberute-generator — trin 3 pipeline-test</title>
+<title>Løberute-generator — trin 4 kortvisning</title>
+<link rel="stylesheet" href="https://unpkg.com/leaflet@1.9.4/dist/leaflet.css" />
 <style>
   :root { color-scheme: light dark; }
   body {
@@ -26,14 +27,22 @@
   }
   button:disabled { background: #aaa; }
   #status { margin-top: 12px; font-size: 0.9rem; color: #555; }
+  #map {
+    height: 320px;
+    margin-top: 12px;
+    border-radius: 8px;
+    border: 1px solid #ccc;
+  }
 </style>
 </head>
 <body>
-  <h1>Trin 3: backend-pipeline-test</h1>
-  <p>Kalder <code>/api/generate-route</code> med hardcodede test-værdier (Aalborg centrum, 5 km) og logger resultatet i konsollen.</p>
+  <h1>Trin 4: kortvisning</h1>
+  <p>Kalder <code>/api/generate-route</code> med hardcodede test-værdier (Aalborg centrum, 5 km) og viser ruten på et Leaflet-kort.</p>
   <button id="run-btn">Hent testrute</button>
   <p id="status"></p>
+  <div id="map"></div>
 
+  <script src="https://unpkg.com/leaflet@1.9.4/dist/leaflet.js"></script>
   <script src="./app.js"></script>
 </body>
 </html>
