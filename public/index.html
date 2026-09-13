@@ -3,7 +3,7 @@
 <head>
 <meta charset="UTF-8" />
 <meta name="viewport" content="width=device-width, initial-scale=1.0" />
-<title>Løberute-generator — trin 4 kortvisning</title>
+<title>Løberute-generator — trin 5 geolocation</title>
 <link rel="stylesheet" href="https://unpkg.com/leaflet@1.9.4/dist/leaflet.css" />
 <style>
   :root { color-scheme: light dark; }
@@ -36,9 +36,9 @@
 </style>
 </head>
 <body>
-  <h1>Trin 4: kortvisning</h1>
-  <p>Kalder <code>/api/generate-route</code> med hardcodede test-værdier (Aalborg centrum, 5 km) og viser ruten på et Leaflet-kort.</p>
-  <button id="run-btn">Hent testrute</button>
+  <h1>Trin 5: geolocation</h1>
+  <p>Henter din rigtige lokation via browserens geolocation, genererer en 5 km-rute derfra, og viser den på kortet.</p>
+  <button id="run-btn">Find min lokation og generér rute</button>
   <p id="status"></p>
   <div id="map"></div>
 

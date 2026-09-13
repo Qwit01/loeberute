@@ -1,6 +1,20 @@
-// Trin 3: minimal frontend-test af backend-pipelinen.
-// Hardcodede test-værdier (Aalborg centrum) — geolocation kommer i trin 5.
-const HARDCODED_INPUT = { lat: 57.0488, lng: 9.9217, km: 5 };
+// Trin 5: brug rigtig geolocation. km er stadig hardcodet — inputfeltet
+// kommer i trin 6.
+const HARDCODED_KM = 5;
+
+function getPosition() {
+  return new Promise((resolve, reject) => {
+    if (!navigator.geolocation) {
+      reject(new Error("Geolocation er ikke understøttet i denne browser"));
+      return;
+    }
+    navigator.geolocation.getCurrentPosition(
+      (pos) => resolve(pos.coords),
+      (err) => reject(new Error(`Kunne ikke hente lokation: ${err.message}`)),
+      { enableHighAccuracy: true, timeout: 10000, maximumAge: 0 }
+    );
+  });
+}
 
 const statusEl = document.getElementById("status");
 const runBtn = document.getElementById("run-btn");
@@ -30,14 +44,18 @@ function drawRoute(points) {
 }
 
 async function run() {
-  statusEl.textContent = "Henter rute fra /api/generate-route...";
+  statusEl.textContent = "Henter din lokation...";
   runBtn.disabled = true;
 
   try {
+    const coords = await getPosition();
+    console.log("geolocation:", coords);
+
+    statusEl.textContent = "Henter rute fra /api/generate-route...";
     const response = await fetch("/api/generate-route", {
       method: "POST",
       headers: { "Content-Type": "application/json" },
-      body: JSON.stringify(HARDCODED_INPUT),
+      body: JSON.stringify({ lat: coords.latitude, lng: coords.longitude, km: HARDCODED_KM }),
     });
     const data = await response.json();
     console.log("generate-route response:", data);
