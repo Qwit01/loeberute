@@ -135,8 +135,12 @@ export default async function handler(req, res) {
   // vendinger), ikke bare den der matcher distancen bedst — se countHairpins.
   let best = null;
 
+  // Rangordning for fallback-valget: en rute inden for ±10% vinder altid over
+  // en der ikke er, uanset hårnåle-antal. Kun blandt ligeværdige (samme
+  // tolerance-status) afgør hårnåle-antal, og til sidst distance-nøjagtighed.
   function isBetter(candidate, current) {
     if (!current) return true;
+    if (candidate.inTolerance !== current.inTolerance) return candidate.inTolerance;
     if (candidate.hairpins !== current.hairpins) return candidate.hairpins < current.hairpins;
     return candidate.distErr < current.distErr;
   }
