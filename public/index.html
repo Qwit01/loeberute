@@ -26,6 +26,7 @@
     cursor: pointer;
   }
   button:disabled { background: #aaa; }
+  #maps-btn { background: #188038; margin-top: 8px; }
   #status { margin-top: 12px; font-size: 0.9rem; color: #555; }
   label { display: block; margin: 12px 0 4px; font-weight: 600; }
   input[type="number"] {
@@ -51,8 +52,9 @@
   <button id="run-btn">Beregn rute</button>
   <p id="status"></p>
   <div id="map"></div>
+  <button id="maps-btn" disabled>Åbn i Google Maps</button>
 
   <script src="https://unpkg.com/leaflet@1.9.4/dist/leaflet.js"></script>
-  <script src="./app.js"></script>
+  <script type="module" src="./app.js"></script>
 </body>
 </html>
