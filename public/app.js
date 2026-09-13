@@ -124,3 +124,9 @@ runBtn.addEventListener("click", run);
 mapsBtn.addEventListener("click", () => {
   if (mapsUrl) window.location.href = mapsUrl;
 });
+
+if ("serviceWorker" in navigator) {
+  window.addEventListener("load", () => {
+    navigator.serviceWorker.register("/sw.js").catch((err) => console.error("SW-registrering fejlede:", err));
+  });
+}
