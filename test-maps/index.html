@@ -1,0 +1,83 @@
+<!DOCTYPE html>
+<html lang="da">
+<head>
+<meta charset="UTF-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1.0" />
+<title>Maps-test — waypoint-forenkling</title>
+<style>
+  :root { color-scheme: light dark; }
+  body {
+    font-family: system-ui, sans-serif;
+    max-width: 480px;
+    margin: 0 auto;
+    padding: 16px;
+    line-height: 1.4;
+  }
+  h1 { font-size: 1.2rem; }
+  .stats { font-size: 0.9rem; color: #555; margin-bottom: 12px; }
+  label { display: block; margin: 12px 0 4px; font-weight: 600; }
+  input[type="range"] { width: 100%; }
+  select { width: 100%; padding: 8px; font-size: 1rem; }
+  button {
+    display: block;
+    width: 100%;
+    padding: 14px;
+    font-size: 1.05rem;
+    margin-top: 12px;
+    border: none;
+    border-radius: 8px;
+    background: #1a73e8;
+    color: white;
+    cursor: pointer;
+  }
+  button:disabled { background: #aaa; }
+  #open-btn { background: #188038; }
+  canvas {
+    width: 100%;
+    height: auto;
+    border: 1px solid #ccc;
+    margin-top: 16px;
+    background: #fafafa;
+  }
+  #url-output {
+    display: block;
+    word-break: break-all;
+    font-size: 0.75rem;
+    background: #f2f2f2;
+    padding: 8px;
+    border-radius: 6px;
+    margin-top: 8px;
+    color: #333;
+  }
+</style>
+</head>
+<body>
+  <h1>Trin 1: Google Maps waypoint-test</h1>
+  <p class="stats">
+    Rå GPS-spor: <strong id="total-points">–</strong> punkter,
+    <strong id="total-distance">–</strong> km i alt.
+  </p>
+
+  <label for="waypoint-count">
+    Antal waypoints i forenklet rute: <span id="waypoint-count-label">8</span>
+    (forenklet til <span id="simplified-count">–</span> punkter inkl. start/slut)
+  </label>
+  <input type="range" id="waypoint-count" min="2" max="12" value="8" step="1" />
+
+  <label for="travelmode">Transportform i Google Maps</label>
+  <select id="travelmode">
+    <option value="walking" selected>Gang (walking) — stemmestyret gå-navigation</option>
+    <option value="bicycling">Cykel (bicycling)</option>
+    <option value="driving">Bil (driving)</option>
+  </select>
+
+  <button id="generate-btn">Generér Maps-URL</button>
+  <a id="url-output" href="#">(ingen URL genereret endnu)</a>
+  <button id="open-btn" disabled>Åbn i Google Maps</button>
+
+  <canvas id="route-canvas" width="440" height="440"></canvas>
+  <p class="stats">Grå = rå GPS-spor. Rød = de forenklede waypoints der sendes til Maps.</p>
+
+  <script type="module" src="./app.js"></script>
+</body>
+</html>
