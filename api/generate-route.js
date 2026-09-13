@@ -83,11 +83,15 @@ export default async function handler(req, res) {
 
   const targetMeters = km * 1000;
   let best = null;
+  // Længden vi rent faktisk beder ORS om. Justeres mellem forsøg baseret på
+  // hvor meget forrige forsøg var ved siden af – hvis ORS konsekvent leverer
+  // for lange/korte ruter i området, hjælper det mere end blot at skifte seed.
+  let requestLength = targetMeters;
 
   try {
     for (let attempt = 1; attempt <= MAX_ATTEMPTS; attempt++) {
       const seed = Math.floor(Math.random() * 1_000_000);
-      const result = await requestRoundTrip(apiKey, lat, lng, targetMeters, seed);
+      const result = await requestRoundTrip(apiKey, lat, lng, requestLength, seed);
 
       if (!best || Math.abs(result.distanceMeters - targetMeters) < Math.abs(best.distanceMeters - targetMeters)) {
         best = result;
@@ -103,6 +107,12 @@ export default async function handler(req, res) {
         });
         return;
       }
+
+      // Proportional korrektion: bad vi om for lidt/for meget forhold til det
+      // vi fik, så ret op på det til næste forsøg, med grænser for at undgå
+      // at sende absurde værdier til ORS.
+      const ratio = targetMeters / result.distanceMeters;
+      requestLength = Math.min(Math.max(requestLength * ratio, targetMeters * 0.3), targetMeters * 3);
     }
 
     // Ingen forsøg landede inden for tolerancen — returnér det bedste vi fandt,
