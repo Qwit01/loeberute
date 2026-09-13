@@ -1,6 +1,12 @@
-// Trin 5: brug rigtig geolocation. km er stadig hardcodet — inputfeltet
-// kommer i trin 6.
-const HARDCODED_KM = 5;
+// Trin 6: km-input + ordentligt UI-flow (loading/fejlhåndtering).
+const MIN_KM = 1;
+const MAX_KM = 42;
+
+const GEO_ERROR_MESSAGES = {
+  1: "Du har afvist adgang til din lokation. Tillad lokation i browserens indstillinger for at bruge appen.",
+  2: "Kunne ikke finde din lokation lige nu. Prøv igen, evt. udenfor.",
+  3: "Det tog for lang tid at finde din lokation. Prøv igen.",
+};
 
 function getPosition() {
   return new Promise((resolve, reject) => {
@@ -10,7 +16,7 @@ function getPosition() {
     }
     navigator.geolocation.getCurrentPosition(
       (pos) => resolve(pos.coords),
-      (err) => reject(new Error(`Kunne ikke hente lokation: ${err.message}`)),
+      (err) => reject(new Error(GEO_ERROR_MESSAGES[err.code] ?? `Kunne ikke hente lokation: ${err.message}`)),
       { enableHighAccuracy: true, timeout: 10000, maximumAge: 0 }
     );
   });
@@ -18,6 +24,7 @@ function getPosition() {
 
 const statusEl = document.getElementById("status");
 const runBtn = document.getElementById("run-btn");
+const kmInput = document.getElementById("km-input");
 
 let map;
 let routeLayer;
@@ -43,40 +50,58 @@ function drawRoute(points) {
   m.fitBounds(routeLayer.getBounds(), { padding: [20, 20] });
 }
 
+function setBusy(busy, message) {
+  runBtn.disabled = busy;
+  kmInput.disabled = busy;
+  if (message) statusEl.textContent = message;
+}
+
 async function run() {
-  statusEl.textContent = "Henter din lokation...";
-  runBtn.disabled = true;
+  const km = Number(kmInput.value);
+  if (!Number.isFinite(km) || km < MIN_KM || km > MAX_KM) {
+    statusEl.textContent = `Indtast et antal km mellem ${MIN_KM} og ${MAX_KM}.`;
+    return;
+  }
+
+  setBusy(true, "Henter din lokation...");
 
   try {
     const coords = await getPosition();
     console.log("geolocation:", coords);
 
-    statusEl.textContent = "Henter rute fra /api/generate-route...";
+    setBusy(true, "Beregner rute...");
     const response = await fetch("/api/generate-route", {
       method: "POST",
       headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({ lat: coords.latitude, lng: coords.longitude, km: HARDCODED_KM }),
+      body: JSON.stringify({ lat: coords.latitude, lng: coords.longitude, km }),
     });
-    const data = await response.json();
+
+    let data;
+    try {
+      data = await response.json();
+    } catch {
+      throw new Error("Uventet svar fra serveren. Prøv igen.");
+    }
     console.log("generate-route response:", data);
 
     if (!response.ok) {
-      statusEl.textContent = `Fejl (${response.status}): ${data.error}`;
-      return;
+      throw new Error(data.error ?? `Serveren svarede med fejl ${response.status}`);
     }
 
-    const km = (data.distanceMeters / 1000).toFixed(2);
+    const actualKm = (data.distanceMeters / 1000).toFixed(2);
     const targetKm = (data.targetMeters / 1000).toFixed(2);
-    statusEl.textContent =
-      `OK: ${data.points.length} punkter, ${km} km (mål ${targetKm} km, ` +
-      `inden for ±10%: ${data.withinTolerance}, ${data.attempts} forsøg).`;
+    const toleranceNote = data.withinTolerance
+      ? ""
+      : " (lidt uden for ±10% — ORS kunne ikke ramme præcis inden for vejnettet her)";
+    setBusy(
+      false,
+      `Rute på ${actualKm} km (mål ${targetKm} km)${toleranceNote}.`
+    );
 
     drawRoute(data.points);
   } catch (err) {
     console.error(err);
-    statusEl.textContent = `Fejl: ${err.message}`;
-  } finally {
-    runBtn.disabled = false;
+    setBusy(false, `Fejl: ${err.message}`);
   }
 }
 
