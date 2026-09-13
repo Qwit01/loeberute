@@ -133,6 +133,8 @@ function badnessScore({ hairpins, closeTurnPairs, smallLoops, turnsPerKm }) {
   return hairpins * 1000 + smallLoops * 800 + closeTurnPairs * 100 + turnsPerKm;
 }
 
+class OrsQuotaError extends Error {}
+
 async function requestRoundTrip(apiKey, lat, lng, targetMeters, seed) {
   const response = await fetch(ORS_URL, {
     method: "POST",
@@ -151,6 +153,11 @@ async function requestRoundTrip(apiKey, lat, lng, targetMeters, seed) {
       },
     }),
   });
+
+  if (response.status === 403 || response.status === 429) {
+    const text = await response.text();
+    throw new OrsQuotaError(`ORS-kvote/rate-limit ramt (${response.status}): ${text}`);
+  }
 
   if (!response.ok) {
     const text = await response.text();
@@ -270,6 +277,12 @@ export default async function handler(req, res) {
       attempts: MAX_ATTEMPTS,
     });
   } catch (err) {
+    if (err instanceof OrsQuotaError) {
+      res.status(503).json({
+        error: "Routing-tjenesten har nået sin gratis kvote for nu. Prøv igen senere.",
+      });
+      return;
+    }
     res.status(502).json({ error: err.message });
   }
 }
