@@ -42,19 +42,61 @@ const MIN_SEGMENT_METERS = 15; // ignorér GPS/polyline-støj på meget korte st
 const HAIRPIN_ANGLE_DEG = 150; // ægte U-vending — næsten altid en blindgyde-spur
 const TURN_ANGLE_DEG = 30; // tærskel for overhovedet at tælle noget som "et sving"
 const MIN_TURN_SPACING_METERS = 40; // to sving tættere end dette ligner en cramped zigzag/spur
+const LOOP_BOUNDARY_MARGIN_METERS = 50; // ignorér nærhed omkring selve start=slut-lukningen
+const LOOP_MIN_PATH_GAP_METERS = 80; // skal have løbet mindst dette for at "vende tilbage" tæller som en løkke
+const LOOP_CLOSE_METERS = 25; // hvor tæt er "stort set samme sted igen"
+
+function cumulativeDistances(points) {
+  const cum = [0];
+  for (let i = 1; i < points.length; i++) {
+    cum.push(cum[i - 1] + haversineMeters(points[i - 1], points[i]));
+  }
+  return cum;
+}
+
+// Tæller små "spytte-cirkler": steder hvor ruten løber en rundtur midt i
+// ruten og ender tæt på et sted den allerede har været, uden nødvendigvis at
+// have noget enkelt skarpt sving (i modsætning til en hårnål). Springer
+// videre forbi hver fundet løkke i stedet for at tælle alle nære punktpar
+// inden i den, så én lille løkke ikke overtæller.
+function countSmallLoops(points, cum) {
+  const total = cum[cum.length - 1];
+  let count = 0;
+  let i = 0;
+  while (i < points.length) {
+    if (cum[i] < LOOP_BOUNDARY_MARGIN_METERS || cum[i] > total - LOOP_BOUNDARY_MARGIN_METERS) {
+      i++;
+      continue;
+    }
+    let foundJ = -1;
+    for (let j = i + 1; j < points.length; j++) {
+      if (cum[j] > total - LOOP_BOUNDARY_MARGIN_METERS) break;
+      if (cum[j] - cum[i] < LOOP_MIN_PATH_GAP_METERS) continue;
+      if (haversineMeters(points[i], points[j]) < LOOP_CLOSE_METERS) {
+        foundJ = j;
+        break;
+      }
+    }
+    if (foundJ !== -1) {
+      count++;
+      i = foundJ + 1;
+    } else {
+      i++;
+    }
+  }
+  return count;
+}
 
 // Analyserer rutens "sleekness": tæller sving, ægte hårnålevendinger (≥150°),
-// og hvor mange sving-par der ligger mistænkeligt tæt på hinanden (typisk tegn
-// på at ruten snor sig frem og tilbage for at ramme distancen, i stedet for at
-// følge en naturlig sti). Alt normaliseres ikke eksplicit efter rutelængde her
-// — det sker i badnessScore, så korte og lange ruter kan sammenlignes fair.
+// sving-par der ligger mistænkeligt tæt på hinanden, og små løkker midt i
+// ruten. Alt normaliseres ikke eksplicit efter rutelængde her — det sker i
+// badnessScore, så korte og lange ruter kan sammenlignes fair.
 function analyzeRoute(points, distanceMeters) {
+  const cum = cumulativeDistances(points);
   const turns = [];
-  let cumulative = 0;
 
   for (let i = 1; i < points.length - 1; i++) {
     const segA = haversineMeters(points[i - 1], points[i]);
-    cumulative += segA;
     const segB = haversineMeters(points[i], points[i + 1]);
     if (segA < MIN_SEGMENT_METERS || segB < MIN_SEGMENT_METERS) continue;
 
@@ -64,7 +106,7 @@ function analyzeRoute(points, distanceMeters) {
     if (diff > 180) diff = 360 - diff;
 
     if (diff >= TURN_ANGLE_DEG) {
-      turns.push({ angle: diff, cumulative });
+      turns.push({ angle: diff, cumulative: cum[i] });
     }
   }
 
@@ -77,17 +119,18 @@ function analyzeRoute(points, distanceMeters) {
     }
   }
 
+  const smallLoops = countSmallLoops(points, cum);
   const turnsPerKm = turns.length / (distanceMeters / 1000);
 
-  return { hairpins, closeTurnPairs, turnsPerKm };
+  return { hairpins, closeTurnPairs, smallLoops, turnsPerKm };
 }
 
-// Én samlet "grimhed"-score til at sammenligne forsøg. Ægte hårnåler vejer
-// suverænt tungest, cramped sving-par næsttungest, og generel sving-tæthed
-// (pr. km, så ruter af forskellig længde kan sammenlignes fair) er en mild
-// tiebreaker for ellers lige gode ruter.
-function badnessScore({ hairpins, closeTurnPairs, turnsPerKm }) {
-  return hairpins * 1000 + closeTurnPairs * 100 + turnsPerKm;
+// Én samlet "grimhed"-score til at sammenligne forsøg. Ægte hårnåler og små
+// løkker vejer suverænt tungest, cramped sving-par næsttungest, og generel
+// sving-tæthed (pr. km, så ruter af forskellig længde kan sammenlignes fair)
+// er en mild tiebreaker for ellers lige gode ruter.
+function badnessScore({ hairpins, closeTurnPairs, smallLoops, turnsPerKm }) {
+  return hairpins * 1000 + smallLoops * 800 + closeTurnPairs * 100 + turnsPerKm;
 }
 
 async function requestRoundTrip(apiKey, lat, lng, targetMeters, seed) {
@@ -194,7 +237,12 @@ export default async function handler(req, res) {
         best = candidate;
       }
 
-      if (candidate.inTolerance && candidate.hairpins === 0 && candidate.closeTurnPairs === 0) {
+      if (
+        candidate.inTolerance &&
+        candidate.hairpins === 0 &&
+        candidate.closeTurnPairs === 0 &&
+        candidate.smallLoops === 0
+      ) {
         res.status(200).json({
           points: candidate.points,
           distanceMeters: candidate.distanceMeters,
