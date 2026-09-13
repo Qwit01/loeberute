@@ -38,25 +38,56 @@ function bearingDeg([lat1, lng1], [lat2, lng2]) {
   return ((Math.atan2(y, x) * 180) / Math.PI + 360) % 360;
 }
 
-// Tæller "hårnålevendinger": korte stræk hvor ruten vender næsten 180° om,
-// som typisk er ORS der løber ned i en blindgyde/sidevej og tilbage igen for
-// at ramme den ønskede distance. Ubemærket af distance-matchet, men mystisk
-// at løbe i praksis.
-function countHairpins(points, minSegmentMeters = 15, angleThresholdDeg = 150) {
-  let count = 0;
+const MIN_SEGMENT_METERS = 15; // ignorér GPS/polyline-støj på meget korte stræk
+const HAIRPIN_ANGLE_DEG = 150; // ægte U-vending — næsten altid en blindgyde-spur
+const TURN_ANGLE_DEG = 30; // tærskel for overhovedet at tælle noget som "et sving"
+const MIN_TURN_SPACING_METERS = 40; // to sving tættere end dette ligner en cramped zigzag/spur
+
+// Analyserer rutens "sleekness": tæller sving, ægte hårnålevendinger (≥150°),
+// og hvor mange sving-par der ligger mistænkeligt tæt på hinanden (typisk tegn
+// på at ruten snor sig frem og tilbage for at ramme distancen, i stedet for at
+// følge en naturlig sti). Alt normaliseres ikke eksplicit efter rutelængde her
+// — det sker i badnessScore, så korte og lange ruter kan sammenlignes fair.
+function analyzeRoute(points, distanceMeters) {
+  const turns = [];
+  let cumulative = 0;
+
   for (let i = 1; i < points.length - 1; i++) {
     const segA = haversineMeters(points[i - 1], points[i]);
+    cumulative += segA;
     const segB = haversineMeters(points[i], points[i + 1]);
-    if (segA < minSegmentMeters || segB < minSegmentMeters) continue;
+    if (segA < MIN_SEGMENT_METERS || segB < MIN_SEGMENT_METERS) continue;
 
     const bearingA = bearingDeg(points[i - 1], points[i]);
     const bearingB = bearingDeg(points[i], points[i + 1]);
     let diff = Math.abs(bearingA - bearingB);
     if (diff > 180) diff = 360 - diff;
 
-    if (diff >= angleThresholdDeg) count++;
+    if (diff >= TURN_ANGLE_DEG) {
+      turns.push({ angle: diff, cumulative });
+    }
   }
-  return count;
+
+  const hairpins = turns.filter((t) => t.angle >= HAIRPIN_ANGLE_DEG).length;
+
+  let closeTurnPairs = 0;
+  for (let i = 1; i < turns.length; i++) {
+    if (turns[i].cumulative - turns[i - 1].cumulative < MIN_TURN_SPACING_METERS) {
+      closeTurnPairs++;
+    }
+  }
+
+  const turnsPerKm = turns.length / (distanceMeters / 1000);
+
+  return { hairpins, closeTurnPairs, turnsPerKm };
+}
+
+// Én samlet "grimhed"-score til at sammenligne forsøg. Ægte hårnåler vejer
+// suverænt tungest, cramped sving-par næsttungest, og generel sving-tæthed
+// (pr. km, så ruter af forskellig længde kan sammenlignes fair) er en mild
+// tiebreaker for ellers lige gode ruter.
+function badnessScore({ hairpins, closeTurnPairs, turnsPerKm }) {
+  return hairpins * 1000 + closeTurnPairs * 100 + turnsPerKm;
 }
 
 async function requestRoundTrip(apiKey, lat, lng, targetMeters, seed) {
@@ -131,17 +162,17 @@ export default async function handler(req, res) {
   // for lange/korte ruter i området, hjælper det mere end blot at skifte seed.
   let requestLength = targetMeters;
 
-  // Blandt alle forsøg foretrækker vi den "pæneste" rute (færrest hårnåle-
-  // vendinger), ikke bare den der matcher distancen bedst — se countHairpins.
+  // Blandt alle forsøg foretrækker vi den "pæneste" rute (lavest badnessScore),
+  // ikke bare den der matcher distancen bedst.
   let best = null;
 
   // Rangordning for fallback-valget: en rute inden for ±10% vinder altid over
-  // en der ikke er, uanset hårnåle-antal. Kun blandt ligeværdige (samme
-  // tolerance-status) afgør hårnåle-antal, og til sidst distance-nøjagtighed.
+  // en der ikke er, uanset badnessScore. Kun blandt ligeværdige (samme
+  // tolerance-status) afgør badnessScore, og til sidst distance-nøjagtighed.
   function isBetter(candidate, current) {
     if (!current) return true;
     if (candidate.inTolerance !== current.inTolerance) return candidate.inTolerance;
-    if (candidate.hairpins !== current.hairpins) return candidate.hairpins < current.hairpins;
+    if (candidate.badness !== current.badness) return candidate.badness < current.badness;
     return candidate.distErr < current.distErr;
   }
 
@@ -150,9 +181,11 @@ export default async function handler(req, res) {
       const seed = Math.floor(Math.random() * 1_000_000);
       const result = await requestRoundTrip(apiKey, lat, lng, requestLength, seed);
 
+      const analysis = analyzeRoute(result.points, result.distanceMeters);
       const candidate = {
         ...result,
-        hairpins: countHairpins(result.points),
+        ...analysis,
+        badness: badnessScore(analysis),
         distErr: Math.abs(result.distanceMeters - targetMeters),
         inTolerance: withinTolerance(result.distanceMeters, targetMeters),
       };
@@ -161,7 +194,7 @@ export default async function handler(req, res) {
         best = candidate;
       }
 
-      if (candidate.inTolerance && candidate.hairpins === 0) {
+      if (candidate.inTolerance && candidate.hairpins === 0 && candidate.closeTurnPairs === 0) {
         res.status(200).json({
           points: candidate.points,
           distanceMeters: candidate.distanceMeters,
