@@ -13,55 +13,225 @@
 <link rel="apple-touch-icon" href="/icons/icon-192.png" />
 <link rel="stylesheet" href="https://unpkg.com/leaflet@1.9.4/dist/leaflet.css" />
 <style>
-  :root { color-scheme: light dark; }
+  :root {
+    color-scheme: light dark;
+    --brand: #1a73e8;
+    --brand-dark: #174ea6;
+    --success: #188038;
+    --success-dark: #127030;
+    --danger: #d93025;
+    --bg: #eef2f8;
+    --card-bg: #ffffff;
+    --text: #1c1e21;
+    --text-muted: #5f6368;
+    --border: #e1e5ea;
+    --slot-bg: #f1f4f9;
+  }
+  @media (prefers-color-scheme: dark) {
+    :root:not([data-theme="light"]) {
+      --bg: #0f1115;
+      --card-bg: #1b1d22;
+      --text: #f1f3f4;
+      --text-muted: #9aa0a6;
+      --border: #2d3037;
+      --slot-bg: #24262c;
+    }
+  }
+
+  * { box-sizing: border-box; }
+
   body {
-    font-family: system-ui, sans-serif;
+    font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif;
     max-width: 480px;
     margin: 0 auto;
     padding: 16px;
     padding-top: max(16px, env(safe-area-inset-top));
-    padding-bottom: max(16px, env(safe-area-inset-bottom));
+    padding-bottom: max(24px, env(safe-area-inset-bottom));
     line-height: 1.4;
+    background: var(--bg);
+    color: var(--text);
   }
-  button {
+
+  header {
+    display: flex;
+    align-items: center;
+    gap: 12px;
+    margin-bottom: 16px;
+  }
+  header img {
+    width: 52px;
+    height: 52px;
+    border-radius: 14px;
+    box-shadow: 0 2px 8px rgba(0, 0, 0, 0.15);
+  }
+  header h1 {
+    font-size: 1.3rem;
+    margin: 0;
+  }
+  header p {
+    margin: 2px 0 0;
+    font-size: 0.85rem;
+    color: var(--text-muted);
+  }
+
+  .card {
+    background: var(--card-bg);
+    border-radius: 16px;
+    padding: 18px;
+    margin-bottom: 16px;
+    box-shadow: 0 1px 3px rgba(0, 0, 0, 0.08), 0 1px 2px rgba(0, 0, 0, 0.06);
+  }
+
+  label {
     display: block;
-    width: 100%;
-    padding: 14px;
-    font-size: 1.05rem;
-    border: none;
-    border-radius: 8px;
-    background: #1a73e8;
-    color: white;
-    cursor: pointer;
+    margin: 0 0 6px;
+    font-weight: 600;
+    font-size: 0.9rem;
   }
-  button:disabled { background: #aaa; }
-  #maps-btn { background: #188038; margin-top: 8px; }
-  #status { margin-top: 12px; font-size: 0.9rem; color: #555; }
-  label { display: block; margin: 12px 0 4px; font-weight: 600; }
+
+  .input-row {
+    display: flex;
+    gap: 10px;
+  }
+
   input[type="number"] {
-    width: 100%;
+    flex: 1;
+    min-width: 0;
     padding: 12px;
     font-size: 1.05rem;
-    border: 1px solid #ccc;
-    border-radius: 8px;
-    box-sizing: border-box;
+    border: 1px solid var(--border);
+    border-radius: 10px;
+    background: var(--bg);
+    color: var(--text);
   }
+
+  button {
+    padding: 13px 16px;
+    font-size: 1rem;
+    font-weight: 600;
+    border: none;
+    border-radius: 10px;
+    background: var(--brand);
+    color: white;
+    cursor: pointer;
+    transition: transform 0.05s ease, opacity 0.15s ease;
+  }
+  button:active { transform: scale(0.98); }
+  button:disabled { background: var(--text-muted); opacity: 0.5; cursor: default; }
+
+  #run-btn { white-space: nowrap; }
+
+  #status {
+    margin: 12px 0 0;
+    font-size: 0.88rem;
+    color: var(--text-muted);
+    min-height: 1.2em;
+  }
+
   #map {
     height: 320px;
     margin-top: 12px;
-    border-radius: 8px;
-    border: 1px solid #ccc;
+    border-radius: 12px;
+    border: 1px solid var(--border);
   }
+
+  #maps-btn {
+    width: 100%;
+    margin-top: 12px;
+    background: var(--success);
+  }
+
+  .save-row {
+    display: flex;
+    align-items: center;
+    gap: 8px;
+    margin-top: 12px;
+    flex-wrap: wrap;
+  }
+  .save-row span {
+    font-size: 0.85rem;
+    color: var(--text-muted);
+  }
+  .slot-btn {
+    width: 40px;
+    padding: 10px 0;
+    background: var(--slot-bg);
+    color: var(--text);
+    border: 1px solid var(--border);
+  }
+
+  .card h2 {
+    font-size: 1rem;
+    margin: 0 0 12px;
+  }
+
+  .favorite-card {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    gap: 10px;
+    padding: 12px;
+    border-radius: 12px;
+    background: var(--slot-bg);
+    margin-bottom: 10px;
+    flex-wrap: wrap;
+  }
+  .favorite-card:last-child { margin-bottom: 0; }
+  .favorite-card.empty {
+    color: var(--text-muted);
+    font-size: 0.9rem;
+    justify-content: center;
+    border: 1px dashed var(--border);
+    background: transparent;
+  }
+  .favorite-info strong { display: block; font-size: 1rem; }
+  .favorite-info span { font-size: 0.78rem; color: var(--text-muted); }
+  .favorite-actions {
+    display: flex;
+    gap: 6px;
+  }
+  .favorite-actions button {
+    padding: 8px 10px;
+    font-size: 0.85rem;
+    font-weight: 500;
+    background: var(--card-bg);
+    color: var(--text);
+    border: 1px solid var(--border);
+  }
+  .favorite-actions button[data-action="maps"] { color: var(--success-dark); }
+  .favorite-actions button[data-action="delete"] { color: var(--danger); }
 </style>
 </head>
 <body>
-  <h1>Løberute-generator</h1>
-  <label for="km-input">Ønsket distance (km)</label>
-  <input type="number" id="km-input" min="1" max="42" step="0.5" value="5" />
-  <button id="run-btn">Beregn rute</button>
-  <p id="status"></p>
-  <div id="map"></div>
-  <button id="maps-btn" disabled>Åbn i Google Maps</button>
+  <header>
+    <img src="/icons/icon-192.png" alt="" />
+    <div>
+      <h1>Løberute-generator</h1>
+      <p>Find en løberute af den rigtige længde, lige der hvor du står</p>
+    </div>
+  </header>
+
+  <main class="card">
+    <label for="km-input">Ønsket distance (km)</label>
+    <div class="input-row">
+      <input type="number" id="km-input" min="1" max="42" step="0.5" value="5" />
+      <button id="run-btn">Beregn rute</button>
+    </div>
+    <p id="status"></p>
+    <div id="map"></div>
+    <button id="maps-btn" disabled>Åbn i Google Maps</button>
+    <div class="save-row" id="save-row" hidden>
+      <span>Gem som favorit:</span>
+      <button class="slot-btn" data-slot="0">1</button>
+      <button class="slot-btn" data-slot="1">2</button>
+      <button class="slot-btn" data-slot="2">3</button>
+    </div>
+  </main>
+
+  <section class="card">
+    <h2>⭐ Favoritruter</h2>
+    <div id="favorites-list"></div>
+  </section>
 
   <script src="https://unpkg.com/leaflet@1.9.4/dist/leaflet.js"></script>
   <script type="module" src="./app.js"></script>

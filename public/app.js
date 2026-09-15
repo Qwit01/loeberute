@@ -5,6 +5,8 @@ import { simplifyEvenlySpaced, buildGoogleMapsUrl } from "./simplify.js";
 const MIN_KM = 1;
 const MAX_KM = 42;
 const MAPS_WAYPOINT_COUNT = 8; // valideret på telefon i trin 1
+const FAVORITES_KEY = "loeberute-favorites";
+const FAVORITE_SLOTS = 3;
 
 const GEO_ERROR_MESSAGES = {
   1: "Du har afvist adgang til din lokation. Tillad lokation i browserens indstillinger for at bruge appen.",
@@ -26,12 +28,39 @@ function getPosition() {
   });
 }
 
+// --- Favoritter (localStorage, kun på denne enhed — intet login/backend) ---
+
+function loadFavorites() {
+  const slots = new Array(FAVORITE_SLOTS).fill(null);
+  try {
+    const raw = localStorage.getItem(FAVORITES_KEY);
+    const parsed = raw ? JSON.parse(raw) : [];
+    for (let i = 0; i < FAVORITE_SLOTS; i++) slots[i] = parsed[i] ?? null;
+  } catch (err) {
+    console.error("Kunne ikke læse gemte favoritter:", err);
+  }
+  return slots;
+}
+
+function persistFavorites() {
+  try {
+    localStorage.setItem(FAVORITES_KEY, JSON.stringify(favorites));
+  } catch (err) {
+    console.error("Kunne ikke gemme favoritter:", err);
+  }
+}
+
+let favorites = loadFavorites();
+
 const statusEl = document.getElementById("status");
 const runBtn = document.getElementById("run-btn");
 const kmInput = document.getElementById("km-input");
 const mapsBtn = document.getElementById("maps-btn");
+const saveRowEl = document.getElementById("save-row");
+const favoritesListEl = document.getElementById("favorites-list");
 
 let mapsUrl = null;
+let currentRoute = null; // { points, distanceMeters, targetMeters }
 
 let map;
 let routeLayer;
@@ -57,12 +86,88 @@ function drawRoute(points) {
   m.fitBounds(routeLayer.getBounds(), { padding: [20, 20] });
 }
 
+function activateRoute(route) {
+  currentRoute = route;
+  drawRoute(route.points);
+
+  const waypoints = simplifyEvenlySpaced(route.points, MAPS_WAYPOINT_COUNT);
+  mapsUrl = buildGoogleMapsUrl(waypoints, { travelmode: "walking" });
+  mapsBtn.disabled = false;
+  saveRowEl.hidden = false;
+}
+
+function renderFavorites() {
+  favoritesListEl.innerHTML = "";
+  favorites.forEach((fav, i) => {
+    const el = document.createElement("div");
+    if (!fav) {
+      el.className = "favorite-card empty";
+      el.textContent = `Tom plads ${i + 1}`;
+      favoritesListEl.appendChild(el);
+      return;
+    }
+
+    el.className = "favorite-card";
+    const km = (fav.distanceMeters / 1000).toFixed(2);
+    const date = new Date(fav.savedAt).toLocaleDateString("da-DK", { day: "numeric", month: "short" });
+
+    const info = document.createElement("div");
+    info.className = "favorite-info";
+    info.innerHTML = `<strong>${km} km</strong><span>Gemt ${date}</span>`;
+
+    const actions = document.createElement("div");
+    actions.className = "favorite-actions";
+    actions.innerHTML = `
+      <button data-action="view" data-slot="${i}">Vis</button>
+      <button data-action="maps" data-slot="${i}">Maps</button>
+      <button data-action="delete" data-slot="${i}">Slet</button>
+    `;
+
+    el.append(info, actions);
+    favoritesListEl.appendChild(el);
+  });
+}
+
+favoritesListEl.addEventListener("click", (event) => {
+  const btn = event.target.closest("button[data-action]");
+  if (!btn) return;
+  const slot = Number(btn.dataset.slot);
+  const fav = favorites[slot];
+  if (!fav) return;
+
+  if (btn.dataset.action === "delete") {
+    favorites[slot] = null;
+    persistFavorites();
+    renderFavorites();
+  } else if (btn.dataset.action === "view") {
+    activateRoute(fav);
+    statusEl.textContent = `Viser favorit: ${(fav.distanceMeters / 1000).toFixed(2)} km.`;
+  } else if (btn.dataset.action === "maps") {
+    const waypoints = simplifyEvenlySpaced(fav.points, MAPS_WAYPOINT_COUNT);
+    window.location.href = buildGoogleMapsUrl(waypoints, { travelmode: "walking" });
+  }
+});
+
+saveRowEl.addEventListener("click", (event) => {
+  const btn = event.target.closest("button[data-slot]");
+  if (!btn || !currentRoute) return;
+  const slot = Number(btn.dataset.slot);
+  favorites[slot] = { ...currentRoute, savedAt: Date.now() };
+  persistFavorites();
+  renderFavorites();
+  statusEl.textContent = `Rute gemt som favorit ${slot + 1}.`;
+});
+
+// --- Rute-generering ---
+
 function setBusy(busy, message) {
   runBtn.disabled = busy;
   kmInput.disabled = busy;
   if (busy) {
     mapsBtn.disabled = true;
+    saveRowEl.hidden = true;
     mapsUrl = null;
+    currentRoute = null;
   }
   if (message) statusEl.textContent = message;
 }
@@ -104,16 +209,13 @@ async function run() {
     const toleranceNote = data.withinTolerance
       ? ""
       : " (lidt uden for ±10% — ORS kunne ikke ramme præcis inden for vejnettet her)";
-    setBusy(
-      false,
-      `Rute på ${actualKm} km (mål ${targetKm} km)${toleranceNote}.`
-    );
+    setBusy(false, `Rute på ${actualKm} km (mål ${targetKm} km)${toleranceNote}.`);
 
-    drawRoute(data.points);
-
-    const waypoints = simplifyEvenlySpaced(data.points, MAPS_WAYPOINT_COUNT);
-    mapsUrl = buildGoogleMapsUrl(waypoints, { travelmode: "walking" });
-    mapsBtn.disabled = false;
+    activateRoute({
+      points: data.points,
+      distanceMeters: data.distanceMeters,
+      targetMeters: data.targetMeters,
+    });
   } catch (err) {
     console.error(err);
     setBusy(false, `Fejl: ${err.message}`);
@@ -124,6 +226,8 @@ runBtn.addEventListener("click", run);
 mapsBtn.addEventListener("click", () => {
   if (mapsUrl) window.location.href = mapsUrl;
 });
+
+renderFavorites();
 
 if ("serviceWorker" in navigator) {
   window.addEventListener("load", () => {
